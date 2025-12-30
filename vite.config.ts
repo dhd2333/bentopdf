@@ -82,9 +82,18 @@ function flattenPagesPlugin(): Plugin {
   };
 }
 
+// Normalize BASE_URL: ensure single leading/trailing slashes, handle edge cases
+function normalizeBaseUrl(url: string): string {
+  if (!url || url === '/') return '/';
+  // Remove multiple consecutive slashes, ensure leading and trailing single slash
+  return '/' + url.replace(/^\/+|\/+$/g, '').replace(/\/+/g, '/') + '/';
+}
+
 function rewriteHtmlPathsPlugin(): Plugin {
   const baseUrl = process.env.BASE_URL || '/';
-  const normalizedBase = baseUrl.replace(/\/?$/, '/');
+  const normalizedBase = normalizeBaseUrl(baseUrl);
+
+  const escapedBase = normalizedBase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   return {
     name: 'rewrite-html-paths',
@@ -96,10 +105,14 @@ function rewriteHtmlPathsPlugin(): Plugin {
         if (fileName.endsWith('.html')) {
           const asset = bundle[fileName];
           if (asset.type === 'asset' && typeof asset.source === 'string') {
+            const hrefRegex = new RegExp(`href="\\/(?!${escapedBase.slice(1)}|test\\/|http|\\/\\/)`, 'g');
+            const srcRegex = new RegExp(`src="\\/(?!${escapedBase.slice(1)}|test\\/|http|\\/\\/)`, 'g');
+            const contentRegex = new RegExp(`content="\\/(?!${escapedBase.slice(1)}|test\\/|http|\\/\\/)`, 'g');
+
             asset.source = asset.source
-              .replace(/href="\/(?!test\/|http|\/\/)/g, `href="${normalizedBase}`)
-              .replace(/src="\/(?!test\/|http|\/\/)/g, `src="${normalizedBase}`)
-              .replace(/content="\/(?!test\/|http|\/\/)/g, `content="${normalizedBase}`);
+              .replace(hrefRegex, `href="${normalizedBase}`)
+              .replace(srcRegex, `src="${normalizedBase}`)
+              .replace(contentRegex, `content="${normalizedBase}`);
           }
         }
       }
@@ -108,7 +121,7 @@ function rewriteHtmlPathsPlugin(): Plugin {
 }
 
 export default defineConfig(({ mode }) => ({
-  base: (process.env.BASE_URL || '/').replace(/\/?$/, '/'),
+  base: normalizeBaseUrl(process.env.BASE_URL || '/'),
   plugins: [
     pagesRewritePlugin(),
     flattenPagesPlugin(),
